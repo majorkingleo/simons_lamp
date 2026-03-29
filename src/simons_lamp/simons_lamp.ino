@@ -6,7 +6,6 @@
 const uint8_t CAPACITIVE_SENSOR_SEND_PIN    = 6;
 const uint8_t CAPACITIVE_SENSOR_RECEIVE_PIN = 7;
 
-
 const uint8_t SWITCH_PIN = 10;
 
 CapacitiveSensor sensor = CapacitiveSensor( CAPACITIVE_SENSOR_SEND_PIN , CAPACITIVE_SENSOR_RECEIVE_PIN );
@@ -14,7 +13,9 @@ CapacitiveSensor sensor = CapacitiveSensor( CAPACITIVE_SENSOR_SEND_PIN , CAPACIT
 bool lamp = 0;
 bool lamp_pin_state = 0;
 long last_capacitance = 0;
-unsigned long next_check = millis() + 5000;
+unsigned long next_check = millis() + 5000uL;
+const unsigned long POWEROFF_TIMEOUT = 1000uL * 60uL * 60uL;
+unsigned long poweroff = millis() + POWEROFF_TIMEOUT;
 
 void setup()
 {
@@ -29,6 +30,8 @@ void setup()
   sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);  
   //sensor.set_CS_AutocaL_Millis(20);  
 }
+
+#undef max
 
 void loop()
 {
@@ -46,7 +49,7 @@ void loop()
             capacitance_raw,
             capacitance_raw - capacitance );
             
-  Serial.println(acBuffer);
+ // Serial.println(acBuffer);
 
   if(abs(capacitance - last_capacitance) > 50){
     if( next_check < millis() ) {
@@ -63,8 +66,10 @@ void loop()
 
   if( lamp != lamp_pin_state ) {  
     if(lamp == 1){
+      
       Serial.println("lamp on");
       digitalWrite(SWITCH_PIN, HIGH);
+      poweroff = millis() + POWEROFF_TIMEOUT;
     }
     else {
       Serial.println("lamp off");
@@ -73,6 +78,19 @@ void loop()
 
     next_check = millis() + 500;
     lamp_pin_state = lamp;
+  }
+  
+  if( poweroff > POWEROFF_TIMEOUT ) {
+    if( poweroff < millis() ) {
+            lamp = 0;
+    }
+   } else {
+    //  Timer overflow
+    if( millis() < POWEROFF_TIMEOUT ) {
+        if( poweroff < millis() ) {
+            lamp = 0;
+        }   
+    }
   }
 
   // Wait for 50 milliseconds
