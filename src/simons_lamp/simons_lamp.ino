@@ -13,9 +13,15 @@ CapacitiveSensor sensor = CapacitiveSensor( CAPACITIVE_SENSOR_SEND_PIN , CAPACIT
 bool lamp = 0;
 bool lamp_pin_state = 0;
 long last_capacitance = 0;
-unsigned long next_check = millis() + 5000uL;
+
 const unsigned long POWEROFF_TIMEOUT = 1000uL * 60uL * 60uL;
-unsigned long poweroff = millis() + POWEROFF_TIMEOUT;
+const unsigned long STARTUP_DELAY    = 5000uL;
+const unsigned long TOGGLE_DELAY     = 500uL;
+
+// Deadlines are initialised in setup(); millis() is not reliable yet
+// while the static initialisers are running.
+unsigned long next_check;
+unsigned long poweroff;
 
 void setup()
 {
@@ -29,13 +35,16 @@ void setup()
   // capacitive sensor library
   sensor.set_CS_AutocaL_Millis(0xFFFFFFFF);  
   //sensor.set_CS_AutocaL_Millis(20);  
+
+  next_check = millis() + STARTUP_DELAY;
+  poweroff   = millis() + POWEROFF_TIMEOUT;
 }
 
 #undef max
 
 void loop()
 {
-  long current_millis = millis();
+  unsigned long current_millis = millis();
   
   long capacitance = sensor.capacitiveSensor(30);
   long capacitance_raw = sensor.capacitiveSensorRaw(30);
@@ -51,8 +60,9 @@ void loop()
             
  // Serial.println(acBuffer);
 
-  if(abs(capacitance - last_capacitance) > 50){
-    if( next_check < millis() ) {
+  if(labs(capacitance - last_capacitance) > 50){
+    // Rollover-safe "has the deadline passed?" test
+    if( (long)(millis() - next_check) >= 0 ) {
       if(lamp == 0){
         lamp = 1;
       }
@@ -76,21 +86,15 @@ void loop()
       digitalWrite(SWITCH_PIN, LOW);
     }
 
-    next_check = millis() + 500;
+    next_check = millis() + TOGGLE_DELAY;
     lamp_pin_state = lamp;
   }
-  
-  if( poweroff > POWEROFF_TIMEOUT ) {
-    if( poweroff < millis() ) {
-            lamp = 0;
-    }
-   } else {
-    //  Timer overflow
-    if( millis() < POWEROFF_TIMEOUT ) {
-        if( poweroff < millis() ) {
-            lamp = 0;
-        }   
-    }
+
+  // Auto power-off after POWEROFF_TIMEOUT.
+  // Rollover-safe: the (long) cast makes the subtraction still correct when
+  // millis() wraps around (it overflows every ~49.7 days on AVR).
+  if( (long)(millis() - poweroff) >= 0 ) {
+    lamp = 0;
   }
 
   // Wait for 50 milliseconds
